@@ -1,0 +1,35 @@
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Virtual environments
+venv/
+.venv/
+
+# Excel workbooks - exclude by default
+*.xlsx
+*.xls
+*.xlsm
+*.xlsb
+
+# Raw survey data
+*.csv
+
+# Temporary Excel files
+~$*
+
+# Credentials and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Temporary files
+*.tmp
+*.log
+
+# OS files
+Thumbs.db
+.DS_Store

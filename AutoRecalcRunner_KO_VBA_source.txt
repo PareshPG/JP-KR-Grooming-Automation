@@ -1,0 +1,125 @@
+' ============================================================================
+' AutoRecalcRunner_KO - VBA source for a Workbook_Open-triggered macro.
+' KOREA-SPECIFIC VERSION - identical logic to the JP AutoRecalcRunner, just
+' pointed at KO's own Report folder and its own separate result log, so a
+' KO run can never be confused with a JP run in progress at the same time.
+'
+' See AutoRecalcRunner_VBA_source.txt (JP) for the full reasoning behind
+' this approach (native VBA macro triggered by opening a file, not external
+' COM control - the pattern that was confirmed blocked on this machine).
+'
+' SETUP (one-time, ~2 minutes):
+'   1. Create a new blank workbook, save it as AutoRecalcRunner_KO.xlsm in
+'      C:\JP KR Grooming\Python\KO\  (NOT inside the Report/RawData/
+'      Formatting subfolders - it must never be a candidate when the
+'      pipeline scans those folders for exactly one file)
+'   2. Alt+F11 > double-click "ThisWorkbook" > paste PART 1 below
+'   3. Insert > Module > paste PART 2 below (optional manual override)
+'   4. Save (keep .xlsm format), close the VBA editor
+'   5. Add C:\JP KR Grooming\Python\KO\ as a Trusted Location (or confirm
+'      the parent C:\JP KR Grooming\Python\ is already trusted with
+'      subfolders included - if so, this step is already done)
+'   6. Close AutoRecalcRunner_KO.xlsm completely
+'
+' HOW IT'S TRIGGERED: recalculate_via_macro_KO.py launches this file as a
+' plain new process (not COM), waits for it to finish, and reads the log
+' file this macro writes to report success or failure.
+' ============================================================================
+
+Private Sub Workbook_Open()
+    Dim targetFolder As String
+    Dim targetFile As String
+    Dim matchCount As Integer
+    Dim allMatches As String
+    Dim wb As Workbook
+    Dim logPath As String
+
+    targetFolder = "C:\JP KR Grooming\Python\KO\Report\"
+    logPath = "C:\JP KR Grooming\Python\KO\recalc_result.txt"
+
+    On Error GoTo ErrorHandler
+
+    targetFile = Dir(targetFolder & "*_Working.xlsx")
+    matchCount = 0
+    allMatches = ""
+    Do While targetFile <> ""
+        matchCount = matchCount + 1
+        If allMatches <> "" Then allMatches = allMatches & "; "
+        allMatches = allMatches & targetFile
+        targetFile = Dir()
+    Loop
+
+    If matchCount = 0 Then
+        WriteLog logPath, "FAIL: No *_Working.xlsx file found in " & targetFolder
+        GoTo CleanExit
+    ElseIf matchCount > 1 Then
+        WriteLog logPath, "FAIL: Found " & matchCount & " files matching " & _
+            "*_Working.xlsx in " & targetFolder & " - expected exactly 1. " & _
+            "Remove the extra file(s) so there's no ambiguity: " & allMatches
+        GoTo CleanExit
+    End If
+
+    targetFile = Dir(targetFolder & "*_Working.xlsx")
+
+    Application.DisplayAlerts = False
+    Application.ScreenUpdating = False
+
+    Set wb = Workbooks.Open(targetFolder & targetFile)
+    Application.CalculateFullRebuild
+    wb.Save
+    wb.Close SaveChanges:=False
+
+    WriteLog logPath, "SUCCESS: " & targetFile & " recalculated and saved at " & Now
+    GoTo CleanExit
+
+ErrorHandler:
+    WriteLog logPath, "FAIL: " & Err.Description & " (Error " & Err.Number & ")"
+
+CleanExit:
+    ThisWorkbook.Saved = True
+    Application.Quit
+End Sub
+
+Private Sub WriteLog(path As String, message As String)
+    Dim f As Integer
+    f = FreeFile
+    Open path For Output As #f
+    Print #f, message
+    Close #f
+End Sub
+
+
+' ============================================================================
+' PART 2 (optional): manual override with a file picker. Identical to the
+' JP version - insert into a plain Module, run via Alt+F8.
+' ============================================================================
+
+Public Sub RecalcWithFilePicker()
+    Dim selectedFile As Variant
+    Dim wb As Workbook
+
+    selectedFile = Application.GetOpenFilename( _
+        FileFilter:="Excel Files (*.xlsx; *.xlsm), *.xlsx; *.xlsm", _
+        Title:="Select the file to recalculate and save")
+
+    If selectedFile = False Then
+        MsgBox "No file selected - cancelled.", vbInformation
+        Exit Sub
+    End If
+
+    On Error GoTo ErrorHandler
+
+    Application.DisplayAlerts = False
+    Application.ScreenUpdating = False
+
+    Set wb = Workbooks.Open(selectedFile)
+    Application.CalculateFullRebuild
+    wb.Save
+    wb.Close SaveChanges:=False
+
+    MsgBox "Done: " & selectedFile & " recalculated and saved.", vbInformation
+    Exit Sub
+
+ErrorHandler:
+    MsgBox "Failed: " & Err.Description & " (Error " & Err.Number & ")", vbExclamation
+End Sub
